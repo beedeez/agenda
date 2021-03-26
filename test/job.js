@@ -316,13 +316,13 @@ describe("Job", () => {
       });
 
       it("sets interval with skip days", () => {
-        const lastRun = moment().set({
+        const lastRun = moment().tz("GMT").set({
           hour: 0,
           minute: 0,
           second: 0,
           millisecond: 0,
         });
-        const expectedFirstRunDate = moment().add(4, "days");
+        const expectedFirstRunDate = moment().tz("GMT").add(4, "days");
         expectedFirstRunDate.set({
           hour: 0,
           minute: 0,
@@ -331,6 +331,7 @@ describe("Job", () => {
         });
         job.repeatEvery("0 0 * * *", {
           skipDays: "3 days",
+          timezone: "GMT",
         }); // Daily at midnight
         job.attrs.lastRunAt = lastRun.toDate();
         job.computeNextRunAt();
