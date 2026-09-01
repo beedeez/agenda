@@ -43,7 +43,7 @@ export interface DefineOptions {
 
 export type Processor<T> =
   | ((job: Job<T>) => Promise<void>)
-  | ((job: Job<T>, done: () => void) => void);
+  | ((job: Job<T>, done: (error?: Error) => void) => void);
 
 /**
  * Setup definition for job
