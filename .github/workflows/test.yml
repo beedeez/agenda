@@ -10,10 +10,10 @@ jobs:
         mongodb-version: [4.0, 4.2, 4.4, 5.0, 6.0]
     steps:
       - name: Git checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
 
@@ -23,7 +23,7 @@ jobs:
           mongodb-version: ${{ matrix.mongodb-version }}
 
       - name: Cache node modules
-        uses: actions/cache@v2
+        uses: actions/cache@v4
         env:
           cache-name: cache-node-modules
         with:
