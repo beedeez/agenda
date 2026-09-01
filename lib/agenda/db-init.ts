@@ -1,5 +1,5 @@
 import createDebugger from "debug";
-import { Collection } from "mongodb";
+import { AnyError, Collection } from "mongodb";
 import { Agenda } from ".";
 
 const debug = createDebugger("agenda:db_init");
@@ -9,20 +9,26 @@ const debug = createDebugger("agenda:db_init");
  * @name Agenda#dbInit
  * @function
  * @param collection name or undefined for default 'agendaJobs'
- * @param cb called when the db is initialized
+ * @param [cb] called when the db is initialized
  */
 export const dbInit = function (
   this: Agenda,
   collection = "agendaJobs",
-  cb?: (error: Error, collection: Collection<any> | null) => void
+  cb?: (error: AnyError | undefined, collection: Collection<any> | null) => void
 ): void {
   debug("init database collection using name [%s]", collection);
   this._collection = this._mdb.collection(collection);
+  if (this._disableAutoIndex) {
+    debug("skipping auto index creation");
+    this.emit("ready");
+    return;
+  }
+
   debug("attempting index creation");
   this._collection.createIndex(
     this._indices,
     { name: "findAndLockNextJobIndex" },
-    (error: Error) => {
+    (error) => {
       if (error) {
         debug("index creation failed");
         this.emit("error", error);

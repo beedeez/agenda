@@ -4,22 +4,13 @@
 <p align="center">
   A light-weight job scheduling library for Node.js
 </p>
-<p align="center">
-  <a href="https://slackin-ekwifvcwbr.now.sh/"><img src="https://slackin-ekwifvcwbr.now.sh/badge.svg" alt="Slack Status"></a>
-  <a href="https://david-dm.org/agenda/agenda"><img src="https://david-dm.org/agenda/agenda/status.svg" alt="dependencies Status"></a>
-  <a href="https://david-dm.org/agenda/agenda?type=dev"><img src="https://david-dm.org/agenda/agenda/dev-status.svg" alt="devDependencies Status"></a>
-  <a href="https://coveralls.io/github/agenda/agenda?branch=master"><img src="https://coveralls.io/repos/github/agenda/agenda/badge.svg?branch=master" alt="Coverage Status"></a>
-	<br>
-	<br>
-	<br>
-</p>
 
 # Agenda offers
 
 - Minimal overhead. Agenda aims to keep its code base small.
 - Mongo backed persistence layer.
 - Promises based API.
-- Scheduling with configurable priority, concurrency, and repeating.
+- Scheduling with configurable priority, concurrency, repeating and persistence of job results.
 - Scheduling via cron or human readable syntax.
 - Event backed job queue that you can hook into.
 - [Agenda-rest](https://github.com/agenda/agenda-rest): optional standalone REST API.
@@ -59,6 +50,40 @@ Install via NPM
     npm install agenda
 
 You will also need a working [Mongo](https://www.mongodb.com/) database (v3) to point it to.
+
+# CJS / Module Imports
+
+for regular javascript code, just use the default entrypoint
+
+```js
+const Agenda = require("agenda");
+```
+
+For Typescript, Webpack or other module imports, use `agenda/es` entrypoint:
+e.g.
+
+```ts
+import Agenda, { Job, JobAttributesData } from 'agenda'
+
+const mongoConnectionString = "mongodb://127.0.0.1/agenda";
+const agenda = new Agenda({ db: { address: mongoConnectionString } });
+
+interface CreateContact extends JobAttributesData {
+  contactDetails: Contact // app-specific type
+}
+
+agenda.define<CreateContact>('CREATE CONTACT', async (job: Job<CreateContact>) => {
+  const contactDetails = job.attrs.data.contactDetails; // type Contact
+})
+
+agenda.now<CreateContact>('CREATE CONTACT', {
+  contactDetails: {...} // required attr
+})
+
+agenda.schedule<CreateContact>('in 5 minutes', 'CREATE CONTACT', {
+  contactDetails: {...} // required attr
+})
+```
 
 # Example Usage
 
@@ -331,6 +356,13 @@ Takes a `query` which specifies the sort query to be used for finding and lockin
 
 By default it is `{ nextRunAt: 1, priority: -1 }`, which obeys a first in first out approach, with respect to priority.
 
+### disableAutoIndex(boolean)
+
+Optional. Disables the automatic creation of the default index on the jobs table.
+By default, Agenda creates an index to optimize its queries against Mongo while processing jobs.
+
+This is useful if you want to use your own index in specific use-cases.
+
 ## Agenda Events
 
 An instance of an agenda will emit the following events:
@@ -367,6 +399,7 @@ the following:
 - `priority`: `(lowest|low|normal|high|highest|number)` specifies the priority
   of the job. Higher priority jobs will run first. See the priority mapping
   below
+- `shouldSaveResult`: `boolean` flag that specifies whether the result of the job should also be stored in the database. Defaults to false
 
 Priority mapping:
 
@@ -531,6 +564,26 @@ const numRemoved = await agenda.cancel({ name: "printAnalyticsReport" });
 
 This functionality can also be achieved by first retrieving all the jobs from the database using `agenda.jobs()`, looping through the resulting array and calling `job.remove()` on each. It is however preferable to use `agenda.cancel()` for this use case, as this ensures the operation is atomic.
 
+### disable(mongodb-native query)
+
+Disables any jobs matching the passed mongodb-native query, preventing any matching jobs from being run by the Job Processor.
+
+```js
+const numDisabled = await agenda.disable({ name: "pollExternalService" });
+```
+
+Similar to `agenda.cancel()`, this functionality can be acheived with a combination of `agenda.jobs()` and `job.disable()`
+
+### enable(mongodb-native query)
+
+Enables any jobs matching the passed mongodb-native query, allowing any matching jobs to be run by the Job Processor.
+
+```js
+const numEnabled = await agenda.enable({ name: "pollExternalService" });
+```
+
+Similar to `agenda.cancel()`, this functionality can be acheived with a combination of `agenda.jobs()` and `job.enable()`
+
 ### purge()
 
 Removes all jobs in the database without defined behaviors. Useful if you change a definition name and want to remove old jobs. Returns a Promise resolving to the number of removed jobs, or rejecting on error.
@@ -563,6 +616,23 @@ shutdown.
 ```js
 async function graceful() {
   await agenda.stop();
+  process.exit(0);
+}
+
+process.on("SIGTERM", graceful);
+process.on("SIGINT", graceful);
+```
+
+### drain
+
+Stops the job queue processing and waits till all current jobs finishes.
+
+This can be very useful for graceful shutdowns so that currently running/grabbed jobs are finished before shutting down. Here is an example of how to do a graceful
+shutdown.
+
+```js
+async function graceful() {
+  await agenda.drain();
   process.exit(0);
 }
 
@@ -628,7 +698,7 @@ Specifies an `interval` on which the job should repeat. The job runs at the time
 
 `options.endDate`: `Date` the job should not repeat after the endDate. The job can run on the end-date itself, but not after that.
 
-`options.skipDays`: `humand readable string` ('2 days'). After each run, it will skip the duration of 'skipDays'
+`options.skipDays`: `human readable string` ('2 days'). After each run, it will skip the duration of 'skipDays'
 
 ```js
 job.repeatEvery("10 minutes");
@@ -676,6 +746,17 @@ the above priority table.
 job.priority("low");
 await job.save();
 ```
+
+### setShouldSaveResult(setShouldSaveResult)
+
+Specifies whether the result of the job should also be stored in the database. Defaults to false.
+
+```js
+job.setShouldSaveResult(true);
+await job.save();
+```
+
+The data returned by the job will be available on the `result` attribute after it succeeded and got retrieved again from the database, e.g. via `agenda.jobs(...)` or through the [success job event](#agenda-events)).
 
 ### unique(properties, [options])
 

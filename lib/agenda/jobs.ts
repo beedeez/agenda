@@ -1,4 +1,4 @@
-import { FilterQuery } from "mongodb";
+import { Filter } from "mongodb";
 import { Agenda } from ".";
 import { Job } from "../job";
 import { createJob } from "../utils";
@@ -7,15 +7,15 @@ import { createJob } from "../utils";
  * Finds all jobs matching 'query'
  * @name Agenda#jobs
  * @function
- * @param query object for MongoDB
- * @param sort object for MongoDB
- * @param limit number of documents to return from MongoDB
- * @param number of documents to skip in MongoDB
+ * @param [query] object for MongoDB
+ * @param [sort] object for MongoDB
+ * @param [limit] number of documents to return from MongoDB
+ * @param [number] of documents to skip in MongoDB
  * @returns resolves when fails or passes
  */
 export const jobs = async function (
   this: Agenda,
-  query: FilterQuery<any> = {},
+  query: Filter<any> = {},
   sort = {},
   limit = 0,
   skip = 0

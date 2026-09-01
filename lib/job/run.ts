@@ -26,7 +26,7 @@ export const run = async function (this: Job): Promise<Job> {
     await this.save();
 
     let finished = false;
-    const jobCallback = async (error?: Error) => {
+    const jobCallback = async (error?: Error, result?: unknown) => {
       // We don't want to complete the job multiple times
       if (finished) {
         return;
@@ -38,9 +38,13 @@ export const run = async function (this: Job): Promise<Job> {
         this.fail(error);
       } else {
         this.attrs.lastFinishedAt = new Date();
+
+        if(this.attrs.shouldSaveResult && result) {
+          this.attrs.result = result;
+        }
       }
 
-      this.attrs.lockedAt = undefined;
+      this.attrs.lockedAt = null;
 
       await this.save().catch((error: Error) => {
         debug(
@@ -110,8 +114,8 @@ export const run = async function (this: Job): Promise<Job> {
           this.attrs.name,
           this.attrs._id
         );
-        await definition.fn(this);
-        await jobCallback();
+        const result = await definition.fn(this);
+        await jobCallback(undefined, result);
       }
     } catch (error) {
       debug("[%s:%s] unknown error occurred", this.attrs.name, this.attrs._id);
