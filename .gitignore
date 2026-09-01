@@ -8,6 +8,7 @@ docs/agenda/*
 !docs/agenda/2.2.0/
 !docs/agenda/3.1.0/
 !docs/agenda/4.0.1/
+!docs/agenda/4.2.0/
 .ultra.cache.json
 .vscode
 
@@ -126,3 +127,6 @@ out
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# generated jsdoc output, not tracked in this fork
+docs/

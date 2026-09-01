@@ -1,6 +1,6 @@
 import createDebugger from "debug";
 import { Agenda } from ".";
-import { Job } from "../job";
+import { Job, JobAttributesData } from "../job";
 import { JobOptions } from "../job/repeat-every";
 
 const debug = createDebugger("agenda:every");
@@ -15,28 +15,28 @@ const debug = createDebugger("agenda:every");
  * @param options - options to run job for
  * @returns Job/s created. Resolves when schedule fails or passes
  */
-export const every = async function (
+export const every = async function<T extends JobAttributesData> (
   this: Agenda,
   interval: string,
   names: string | string[],
-  data?: unknown,
+  data?: T,
   options?: JobOptions
 ): Promise<any> {
   /**
    * Internal method to setup job that gets run every interval
    * @param interval run every X interval
    * @param name String job to schedule
-   * @param data data to run for job
-   * @param options options to run job for
+   * @param [data] data to run for job
+   * @param [options] options to run job for
    * @returns instance of job
    */
-  const createJob = async (
+  const createJob = async<T extends JobAttributesData> (
     interval: string,
     name: string,
-    data?: unknown,
+    data?: T,
     options?: JobOptions
   ): Promise<Job> => {
-    const job = this.create(name, data);
+    const job = this.create(name, data || {});
 
     job.attrs.type = "single";
     job.repeatEvery(interval, options);
@@ -47,14 +47,14 @@ export const every = async function (
    * Internal helper method that uses createJob to create jobs for an array of names
    * @param interval run every X interval
    * @param names Strings of jobs to schedule
-   * @param data data to run for job
-   * @param options options to run job for
+   * @param [data] data to run for job
+   * @param [options] options to run job for
    * @return array of jobs created
    */
   const createJobs = async (
     interval: string,
     names: string[],
-    data?: unknown,
+    data?: T,
     options?: JobOptions
   ): Promise<Job[] | undefined> => {
     try {

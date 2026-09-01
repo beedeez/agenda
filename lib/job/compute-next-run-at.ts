@@ -64,7 +64,7 @@ export const computeNextRunAt = function (this: Job): Job {
       // If start date is present, check if the nextDate should be larger or equal to startDate. If not set startDate as nextDate
       if (startDate) {
         startDate = moment
-          .tz(moment(startDate).format("YYYY-MM-DD"), timezone!)
+          .tz(moment(startDate).format("YYYY-MM-DD HH:mm"), timezone!)
           .toDate();
         if (startDate > nextDate) {
           cronOptions.currentDate = startDate;
@@ -85,7 +85,7 @@ export const computeNextRunAt = function (this: Job): Job {
       // If endDate is less than the nextDate, set nextDate to null to stop the job from running further
       if (endDate) {
         const endDateDate: Date = moment
-          .tz(moment(endDate).format("YYYY-MM-DD"), timezone!)
+          .tz(moment(endDate).format("YYYY-MM-DD HH:mm"), timezone!)
           .toDate();
         if (nextDate > endDateDate) {
           nextDate = null;
@@ -97,7 +97,7 @@ export const computeNextRunAt = function (this: Job): Job {
         "[%s:%s] nextRunAt set to [%s]",
         this.attrs.name,
         this.attrs._id,
-        this.attrs.nextRunAt!.toISOString()
+        this.attrs.nextRunAt?.toISOString()
       );
       // Either `xo` linter or Node.js 8 stumble on this line if it isn't just ignored
     } catch {
@@ -131,7 +131,7 @@ export const computeNextRunAt = function (this: Job): Job {
         // Either `xo` linter or Node.js 8 stumble on this line if it isn't just ignored
       } catch {}
     } finally {
-      if (Number.isNaN(this.attrs.nextRunAt!.getTime())) {
+      if (!this.attrs.nextRunAt?.getTime()) {
         this.attrs.nextRunAt = undefined;
         debug(
           "[%s:%s] failed to calculate nextRunAt due to invalid repeat interval",
@@ -168,7 +168,7 @@ export const computeNextRunAt = function (this: Job): Job {
         "[%s:%s] nextRunAt set to [%s]",
         this.attrs.name,
         this.attrs._id,
-        this.attrs.nextRunAt!.toISOString()
+        this.attrs.nextRunAt?.toISOString()
       );
     } else {
       this.attrs.nextRunAt = date(repeatAt);
@@ -176,7 +176,7 @@ export const computeNextRunAt = function (this: Job): Job {
         "[%s:%s] nextRunAt set to [%s]",
         this.attrs.name,
         this.attrs._id,
-        this.attrs.nextRunAt!.toISOString()
+        this.attrs.nextRunAt?.toISOString()
       );
     }
   };

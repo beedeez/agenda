@@ -34,11 +34,16 @@ export interface DefineOptions {
    * first.
    */
   priority?: JobPriority;
+
+  /**
+   * Should the return value of the job be persisted
+   */
+  shouldSaveResult?: boolean;
 }
 
-export type Processor =
-  | ((job: Job) => Promise<void>)
-  | ((job: Job, done: (error?: Error) => void) => void);
+export type Processor<T> =
+  | ((job: Job<T>) => Promise<void>)
+  | ((job: Job<T>, done: () => void) => void);
 
 /**
  * Setup definition for job
@@ -47,16 +52,16 @@ export type Processor =
  * @function
  * @param name name of job
  * @param options options for job to run
- * @param processor function to be called to run actual job
+ * @param [processor] function to be called to run actual job
  */
-export const define = function (
+export const define = function<T> (
   this: Agenda,
   name: string,
-  options: DefineOptions | Processor,
-  processor?: Processor
+  options: DefineOptions | Processor<T>,
+  processor?: Processor<T>
 ): void {
   if (processor === undefined) {
-    processor = options as Processor;
+    processor = options as Processor<T>;
     options = {};
   }
 
@@ -70,6 +75,7 @@ export const define = function (
       (options as DefineOptions).lockLifetime || this._defaultLockLifetime,
     running: 0,
     locked: 0,
+    shouldSaveResult: (options as DefineOptions).shouldSaveResult || false
   };
   debug(
     "job [%s] defined with following options: \n%O",

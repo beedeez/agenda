@@ -13,10 +13,13 @@ import { isRunning } from "./is-running";
 import { save } from "./save";
 import { remove } from "./remove";
 import { touch } from "./touch";
+import { setShouldSaveResult } from "./set-shouldsaveresult";
 import { parsePriority } from "../utils";
 import { Agenda } from "../agenda";
 import { JobPriority } from "../agenda/define";
 import * as mongodb from "mongodb";
+
+type Modify<T, R> = Omit<T, keyof R> & R
 
 export interface JobAttributesData {
   [key: string]: any;
@@ -27,7 +30,7 @@ export interface JobAttributes<
   /**
    * The record identity.
    */
-  _id?: mongodb.ObjectID;
+  _id: mongodb.ObjectId;
 
   agenda: Agenda;
 
@@ -54,7 +57,7 @@ export interface JobAttributes<
   /**
    * Date/time the job was locked.
    */
-  lockedAt?: Date;
+  lockedAt?: Date | null;
 
   /**
    * The priority of the job.
@@ -64,7 +67,7 @@ export interface JobAttributes<
   /**
    * The job details.
    */
-  data?: T;
+  data: T;
 
   unique?: any;
   uniqueOpts?: {
@@ -116,6 +119,16 @@ export interface JobAttributes<
    * Date/time the job was last modified.
    */
   lastModifiedBy?: string;
+
+  /**
+   * Should the return value of the job be persisted.
+   */
+  shouldSaveResult?: boolean;
+
+  /**
+   * Result of the finished job.
+   */
+  result?: unknown;
 }
 
 /**
@@ -150,8 +163,9 @@ class Job<T extends JobAttributesData = JobAttributesData> {
   save!: typeof save;
   remove!: typeof remove;
   touch!: typeof touch;
+  setShouldSaveResult!: typeof setShouldSaveResult;
 
-  constructor(options: JobAttributes<T>) {
+  constructor(options: Modify<JobAttributes<T>, { _id?: mongodb.ObjectId; }>) {
     const { agenda, type, nextRunAt, ...args } = options ?? {};
 
     // Save Agenda instance
@@ -162,6 +176,9 @@ class Job<T extends JobAttributesData = JobAttributesData> {
       args.priority === undefined
         ? JobPriority.normal
         : parsePriority(args.priority);
+
+    // Set shouldSaveResult option
+    args.shouldSaveResult = args.shouldSaveResult || false
 
     // Set attrs to args
     const attrs: any = {};
@@ -199,5 +216,6 @@ Job.prototype.isRunning = isRunning;
 Job.prototype.save = save;
 Job.prototype.remove = remove;
 Job.prototype.touch = touch;
+Job.prototype.setShouldSaveResult = setShouldSaveResult;
 
 export { Job };

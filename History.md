@@ -1,6 +1,42 @@
 # Next
 
-- _Contributions welcome!_ https://github.com/agenda/agenda/pulls
+_Contributions welcome!_ https://github.com/agenda/agenda/pulls
+
+  # [4.4.0](https://github.com/agenda/agenda/releases/tag/v4.4.0) / 2022-10-19
+
+- Feat: Add `drain()` method for graceful process shutdowns ([#1488](https://github.com/agenda/agenda/pull/1488)) thanks @nmehmedrnd
+
+  # [4.3.0](https://github.com/agenda/agenda/releases/tag/v4.3.0) / 2022-05-10
+
+- Feat: `disableAutoIndex`
+- Feat: `shouldSaveResult`
+
+  # 4.2.1 / 2021-08-09
+
+- fix: deprecation warning for collection.findOneAndUpdate ([#1338](https://github.com/agenda/agenda/pull/1338)) thanks @frobinsonj
+
+  # 4.2.0 / 2021-08-05
+
+- Feat: Add top level disable and enable ([#1109](https://github.com/agenda/agenda/pull/1109)) thanks @pdfowler
+- fix(history): match cron-parser pattern ([#1335](https://github.com/agenda/agenda/pull/1335)) thanks @dockleryxk
+- fix: "RangeError: Maximum call stack size exceeded" ([#1365](https://github.com/agenda/agenda/pull/1365)) thanks @koresar
+- fix: JobAttributes.lockedAt to allow null values ([#1340](https://github.com/agenda/agenda/pull/1340)) thanks @tjramage
+- Updated dependencies: `mongodb@3.6.6`, `lodash@4.17.21`, as well as various dev dependencies.
+- Added node 16 in tests ([#1314](https://github.com/agenda/agenda/pull/1086)) thanks @simison
+
+  # 4.1.3 / 2021-05-02
+
+- fix: export cjs and es (#1298) thanks @koresar
+
+  # 4.1.2 / 2021-05-02
+
+- fix: broken main cjs export works again. See more [here](https://github.com/agenda/agenda/issues/1266#issuecomment-830628762).
+
+  # 4.1.2 / 2021-04-04
+
+- Docs, JSDocs and TS typo fixes. Thanks @niftylettuce @thebestnom @simllll and @Igor-lkm
+
+- fix: typescript export needs es6 ([#1268](https://github.com/agenda/agenda/pull/#1268)) thanks @simllll
 
   # 4.1.1 / 2021-03-02
 
@@ -76,12 +112,12 @@
       ```
       * * * * * *
       | | | | | |
-      | | | | | +-- Year              (range: 1900-3000)
-      | | | | +---- Day of the Week   (range: 1-7, 1 standing for Monday)
-      | | | +------ Month of the Year (range: 1-12) NOTE: Difference here
-      | | +-------- Day of the Month  (range: 1-31)
-      | +---------- Hour              (range: 0-23)
-      +------------ Minute            (range: 0-59)
+      | | | | | +-- Day of the Week   (range: 0-7, 0 or 7 is Sunday)
+      | | | | +---- Month of the Year (range: 1-12) NOTE: Difference here
+      | | | +------ Day of the Month  (range: 1-31)
+      | | +-------- Hour              (range: 0-23)
+      | +---------- Minute            (range: 0-59)
+      +------------ Second            (range: 0-59, optional)
       ```
 
   # 3.1.0 / 2020-04-07

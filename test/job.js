@@ -5,66 +5,45 @@ const cp = require("child_process");
 const expect = require("expect.js");
 const moment = require("moment-timezone");
 const { MongoClient } = require("mongodb");
-const Q = require("q");
 const delay = require("delay");
 const sinon = require("sinon");
 const { Job } = require("../dist/job");
 const { Agenda } = require("../dist");
+const getMongoCfg = require("./fixtures/mongo-connector");
 
-const mongoHost = process.env.MONGODB_HOST || "localhost";
-const mongoPort = process.env.MONGODB_PORT || "27017";
-const agendaDatabase = "agenda-test";
-const mongoCfg =
-  "mongodb://" + mongoHost + ":" + mongoPort + "/" + agendaDatabase;
+let mongoCfg;
 
 // Create agenda instances
 let agenda = null;
-let mongoDb = null;
 let mongoClient = null;
-
+let mongoDb = null;
 const clearJobs = () => {
   return mongoDb.collection("agendaJobs").deleteMany({});
 };
 
-// Slow timeouts for CI
-const jobTimeout = 500;
-const jobType = "do work";
-const jobProcessor = () => {};
+const jobTimeout = process.env.CI ? 500 : 50;
 
 describe("Job", () => {
-  beforeEach((done) => {
-    agenda = new Agenda(
-      {
-        db: {
-          address: mongoCfg,
-        },
+  beforeEach(async () => {
+    mongoCfg = await getMongoCfg();
+  });
+
+  beforeEach(async () => {
+    agenda = new Agenda({
+      db: {
+        address: mongoCfg,
       },
-      async (error) => {
-        if (error) {
-          done(error);
-        }
+    });
 
-        try {
-          const client = await MongoClient.connect(mongoCfg, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
-          });
-          mongoClient = client;
-          mongoDb = client.db(agendaDatabase);
+    await agenda._ready;
 
-          await delay(50);
-          await clearJobs();
+    mongoClient = await MongoClient.connect(mongoCfg);
+    mongoDb = mongoClient.db();
 
-          agenda.define("someJob", jobProcessor);
-          agenda.define("send email", jobProcessor);
-          agenda.define("some job", jobProcessor);
-          agenda.define(jobType, jobProcessor);
-          done();
-        } catch (error) {
-          done(error);
-        }
-      }
-    );
+    await delay(5);
+    await clearJobs();
+
+    agenda.define("some job", () => {});
   });
 
   afterEach(async () => {
@@ -259,20 +238,21 @@ describe("Job", () => {
 
     describe("interval with startDate, endDate, skipDates", () => {
       it("sets interval with startDate in future", () => {
-        const futureDate = moment().add(7, "days");
-        const expectedFirstRunDate = moment().add(8, "days");
+        const futureDate = moment.utc().add(7, "days");
+        const expectedFirstRunDate = moment.utc().add(8, "days");
         expectedFirstRunDate.set({
           hour: 0,
           minute: 0,
           second: 0,
           millisecond: 0,
         });
-        job.repeatEvery("0 0 * * *", {
+        job.repeatEvery("0 0 * * *", { // Daily at midnight UTC
           startDate: futureDate.toDate(),
-        }); // Daily at midnight
+          timezone: "UTC", // This unit test fails in Australia if you comment out this line of code.
+        });
         job.computeNextRunAt();
-        expect(job.attrs.nextRunAt.getTime()).to.be(
-          expectedFirstRunDate.toDate().getTime()
+        expect(job.attrs.nextRunAt.toString()).to.equal(
+          expectedFirstRunDate.toDate().toString()
         );
       });
 
@@ -316,13 +296,13 @@ describe("Job", () => {
       });
 
       it("sets interval with skip days", () => {
-        const lastRun = moment().tz("GMT").set({
+        const lastRun = moment().set({
           hour: 0,
           minute: 0,
           second: 0,
           millisecond: 0,
         });
-        const expectedFirstRunDate = moment().tz("GMT").add(4, "days");
+        const expectedFirstRunDate = moment().add(4, "days");
         expectedFirstRunDate.set({
           hour: 0,
           minute: 0,
@@ -331,7 +311,6 @@ describe("Job", () => {
         });
         job.repeatEvery("0 0 * * *", {
           skipDays: "3 days",
-          timezone: "GMT",
         }); // Daily at midnight
         job.attrs.lastRunAt = lastRun.toDate();
         job.computeNextRunAt();
@@ -490,7 +469,7 @@ describe("Job", () => {
     it("handles errors with q promises", async () => {
       job.attrs.name = "failBoat2";
       agenda.define("failBoat2", (job, cb) => {
-        Q.delay(100)
+        delay(100)
           .then(() => {
             // eslint-disable-line
             throw new Error("Zomg fail");
@@ -734,7 +713,7 @@ describe("Job", () => {
     });
   });
 
-  describe("start/stop", () => {
+  describe("start/stop/drain", () => {
     it("starts/stops the job queue", async () => {
       // @TODO: this lint issue should be looked into: https://eslint.org/docs/rules/no-async-promise-executor
       // eslint-disable-next-line no-async-promise-executor
@@ -793,6 +772,28 @@ describe("Job", () => {
       await agenda.stop();
       const job = await agenda._collection.findOne({ name: "longRunningJob" });
       expect(job.lockedAt).to.be(null);
+    });
+
+    it("clears current running job on drain", async () => {
+      const tasks = [];
+      agenda.define("longRunningJob", (job, cb) => {
+        tasks.push(cb);
+      });
+      agenda.every("10 seconds", "longRunningJob");
+      agenda.processEvery("1 second");
+
+      await agenda.start();
+      await delay(jobTimeout);
+
+      setTimeout(()=> {
+        tasks.forEach(cb => cb());
+      }, 10);
+      expect(agenda._runningJobs.length).to.be(1);
+
+      await agenda.drain();
+      const job = await agenda._collection.findOne({ name: "longRunningJob" });
+      expect(job.lockedAt).to.be(null);
+      expect(agenda._runningJobs.length).to.be(0);
     });
 
     describe("events", () => {
@@ -935,17 +936,18 @@ describe("Job", () => {
       let runCount = 0;
 
       const processorPromise = new Promise((resolve) => {
-        agenda.define("lock job", { lockLifetime: 50 }, async (job, cb) => {
-          // eslint-disable-line no-unused-vars
+        agenda.define("lock job", { lockLifetime: 50 }, async () => {
           runCount++;
 
-          if (runCount !== 1) {
-            expect(runCount).to.be(2);
+          if (runCount === 1) {
+            expect(runCount).to.be(1);
             await agenda.stop();
-            resolve();
+            return resolve();
           }
         });
       });
+
+      expect(agenda._definitions["lock job"].lockLifetime).to.be(50);
 
       agenda.processEvery(50);
       await agenda.start();
@@ -953,7 +955,11 @@ describe("Job", () => {
         i: 1,
       });
       await processorPromise;
-    });
+
+      // Without this delay, the initial job execution will finish and attempt to
+      // save to a DB that doesn't exist anymore.
+      await delay(100);
+    }).timeout(10000);
 
     it("does not process locked jobs", async () => {
       const history = [];
@@ -981,12 +987,12 @@ describe("Job", () => {
         agenda.now("lock job", { i: 3 }),
       ]);
 
-      await delay(500);
+      await delay(600);
       expect(history).to.have.length(3);
       expect(history).to.contain(1);
       expect(history).to.contain(2);
       expect(history).to.contain(3);
-    });
+    }).timeout(10000);
 
     it("does not on-the-fly lock more than agenda._lockLimit jobs", async () => {
       agenda.lockLimit(1);
@@ -1288,6 +1294,127 @@ describe("Job", () => {
       await agenda.stop();
     });
   });
+
+  describe("job save result", () => {
+    describe("set option", () => {
+      it("should not be true by default", () => {
+        const job = new Job();
+        expect(job.attrs.shouldSaveResult).to.be(false);
+      });
+      it("should set option via method", () => {
+        const job = new Job();
+        job.setShouldSaveResult(true);
+        expect(job.attrs.shouldSaveResult).to.be(true);
+      });
+      it("should set option via constructor", () => {
+        const job = new Job({shouldSaveResult: true});
+        expect(job.attrs.shouldSaveResult).to.be(true);
+      });
+      it("returns the job", () => {
+        const job = new Job();
+        expect(job.setShouldSaveResult(true)).to.be(job);
+      });
+    });
+    describe("saves result", () => {
+      describe("using callback", () => {
+        it("should not save result if option is missing", async () => {
+          agenda.define("savedResultJob", (job, cb) => {
+            cb(undefined, "job-result");
+          });
+          await agenda.start();
+          await agenda.now("savedResultJob");
+          await delay(jobTimeout);
+          const result = await agenda.jobs({ name: "savedResultJob" });
+          expect(result[0].attrs.result).to.be(undefined)
+        });
+        it("should not save result if option is false", async () => {
+          agenda.define("savedResultJob", {shouldSaveResult: false}, (job, cb) => {
+            cb(undefined, "job-result");
+          });
+          await agenda.start();
+          await agenda.now("savedResultJob");
+          await delay(jobTimeout);
+          const result = await agenda.jobs({ name: "savedResultJob" });
+          expect(result[0].attrs.result).to.be(undefined)
+        });
+        it("should save result if option is true", async () => {
+          agenda.define("savedResultJob", {shouldSaveResult: true}, (job, cb) => {
+            cb(undefined, "job-result");
+          });
+          await agenda.start();
+          await agenda.now("savedResultJob");
+          await delay(jobTimeout);
+          const result = await agenda.jobs({ name: "savedResultJob" });
+          expect(result[0].attrs.result).to.be("job-result");
+        });
+      });
+
+      describe("using promise", () => {
+        it("should not save result if option is missing", async () => {
+          agenda.define("savedResultJob", async (job) => {
+            return "job-result";
+          });
+          await agenda.start();
+          await agenda.now("savedResultJob");
+          await delay(jobTimeout);
+          const result = await agenda.jobs({ name: "savedResultJob" });
+          expect(result[0].attrs.result).to.be(undefined)
+        });
+        it("should not save result if option is false", async () => {
+          agenda.define("savedResultJob", {shouldSaveResult: false}, async (job) => {
+            return "job-result";
+          });
+          await agenda.start();
+          await agenda.now("savedResultJob");
+          await delay(jobTimeout);
+          const result = await agenda.jobs({ name: "savedResultJob" });
+          expect(result[0].attrs.result).to.be(undefined)
+        });
+        it("should save result if option is true", async () => {
+          agenda.define("savedResultJob", {shouldSaveResult: true}, async (job) => {
+            return "job-result";
+          });
+          await agenda.start();
+          await agenda.now("savedResultJob");
+          await delay(jobTimeout);
+          const result = await agenda.jobs({ name: "savedResultJob" });
+          expect(result[0].attrs.result).to.be("job-result");
+        });
+      });
+      describe("using sync function", () => {
+        it("should not save result if option is missing", async () => {
+          agenda.define("savedResultJob", (job) => {
+            return "job-result";
+          });
+          await agenda.start();
+          await agenda.now("savedResultJob");
+          await delay(jobTimeout);
+          const result = await agenda.jobs({ name: "savedResultJob" });
+          expect(result[0].attrs.result).to.be(undefined)
+        });
+        it("should not save result if option is false", async () => {
+          agenda.define("savedResultJob", {shouldSaveResult: false}, (job) => {
+            return "job-result";
+          });
+          await agenda.start();
+          await agenda.now("savedResultJob");
+          await delay(jobTimeout);
+          const result = await agenda.jobs({ name: "savedResultJob" });
+          expect(result[0].attrs.result).to.be(undefined)
+        });
+        it("should save result if option is true", async () => {
+          agenda.define("savedResultJob", {shouldSaveResult: true}, (job) => {
+            return "job-result";
+          });
+          await agenda.start();
+          await agenda.now("savedResultJob");
+          await delay(jobTimeout);
+          const result = await agenda.jobs({ name: "savedResultJob" });
+          expect(result[0].attrs.result).to.be("job-result");
+        });
+      });
+    });
+  })
 
   describe("Integration Tests", () => {
     describe(".every()", () => {
